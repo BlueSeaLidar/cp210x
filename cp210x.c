@@ -230,7 +230,7 @@ static struct usb_serial_driver cp210x_device = {
 	.tiocmget		= cp210x_tiocmget,
 	.tiocmset		= cp210x_tiocmset,
 	.port_probe		= cp210x_port_probe,
-	.port_remove		= cp210x_port_remove,
+	.port_remove		= (void*)*cp210x_port_remove,
 	.dtr_rts		= cp210x_dtr_rts
 };
 
