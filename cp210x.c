@@ -23,6 +23,8 @@
 #include <linux/usb.h>
 #include <linux/uaccess.h>
 #include <linux/usb/serial.h>
+#include <linux/version.h>
+
 
 #define DRIVER_DESC "Silicon Labs CP210x RS232 serial adaptor driver"
 
@@ -226,7 +228,9 @@ static struct usb_serial_driver cp210x_device = {
 	.ioctl			= cp210x_ioctl,
 	.break_ctl		= cp210x_break_ctl,
 	.set_termios		= cp210x_set_termios,
+#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 9, 5)
 	.tx_empty		= cp210x_tx_empty,
+#endif
 	.tiocmget		= cp210x_tiocmget,
 	.tiocmset		= cp210x_tiocmset,
 	.port_probe		= cp210x_port_probe,
@@ -361,6 +365,11 @@ struct cp210x_flow_ctl {
 	__le32	ulXonLimit;
 	__le32	ulXoffLimit;
 } __packed;
+
+#ifndef GENMASK
+#define GENMASK(h, l) \
+	(((~0UL) - (1UL << (l)) + 1) & (~0UL >> (BITS_PER_LONG - 1 - (h))) )
+#endif
 
 /* cp210x_flow_ctl::ulControlHandshake */
 #define CP210X_SERIAL_DTR_MASK		GENMASK(1, 0)
@@ -1028,7 +1037,11 @@ static void cp210x_get_termios(struct tty_struct *tty,
 
 	if (tty) {
 		cp210x_get_termios_port(tty->driver_data,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
+			&tty->termios->c_cflag, &baud);
+#else
 			&tty->termios.c_cflag, &baud);
+#endif
 		tty_encode_baud_rate(tty, baud, baud);
 	} else {
 		unsigned int cflag;
@@ -1190,7 +1203,11 @@ static void cp210x_change_speed(struct tty_struct *tty,
 {
 	u32 baud;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
+	baud = tty->termios->c_ospeed;
+#else
 	baud = tty->termios.c_ospeed;
+#endif
 
 	/* This maps the requested rate to a rate valid on cp2102 or cp2103,
 	 * or to an arbitrary rate in [1M,2M].
@@ -1218,11 +1235,18 @@ static void cp210x_set_termios(struct tty_struct *tty,
 	unsigned int cflag, old_cflag;
 	u16 bits;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 7, 0)
+	cflag = tty->termios->c_cflag;
+	old_cflag = old_termios->c_cflag;
+	if (tty->termios->c_ospeed != old_termios->c_ospeed)
+		cp210x_change_speed(tty, port, old_termios);
+#else
 	cflag = tty->termios.c_cflag;
 	old_cflag = old_termios->c_cflag;
-
 	if (tty->termios.c_ospeed != old_termios->c_ospeed)
 		cp210x_change_speed(tty, port, old_termios);
+#endif
+
 
 	/* If the number of data bits is to be updated */
 	if ((cflag & CSIZE) != (old_cflag & CSIZE)) {
